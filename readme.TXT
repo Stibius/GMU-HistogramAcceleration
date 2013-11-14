@@ -1,41 +1,56 @@
-Název zadání:
-        Urychlení zpracování obrazu zaloené na modifikaci histogramu
+NÃ¡zev zadÃ¡nÃ­:
+        UrychlenÃ­ zpracovÃ¡nÃ­ obrazu zaloÂenÃ© na modifikaci histogramu
 
-Jména øešitelù:
-        Jan Vybíral, xvybir05
+JmÃ©na Å™eÂšitelÅ¯:
+        Jan VybÃ­ral, xvybir05
         Filip Zapletal, xzaple27
-        Piják Lukáš, xpijak00
+        PijÃ¡k LukÃ¡Âš, xpijak00
 
-Popis problému:
-        Zpracovat vıpoèet histogramu a 3 metody zpracování obrazu
-vyuívající tento histogram.
+Popis problÃ©mu:
+        Zpracovat vÃ½poÄet histogramu a 3 metody zpracovÃ¡nÃ­ obrazu
+vyuÂÃ­vajÃ­cÃ­ tento histogram.
 
-Popis cíle:
-        Zpracujeme vıpoèet histogramu vstupního obrázku pomocí OpenCL.
-Potom kadı èlen tımu zpracuje jednu metodu vyuívající tento histogram, a
-to jak s pomocí OpenCL tak CPU implementaci. Vıslednı program umoní vybrat
-vstupní obrázek a metodu, kterou provede obìma zpùsoby, a vypíše èas
-provedení kadého z nich a zobrazí vıstupní obrázek.
+Popis cÃ­le:
+        Zpracujeme vÃ½poÄet histogramu vstupnÃ­ho obrÃ¡zku pomocÃ­ OpenCL.
+Potom kaÂdÃ½ Älen tÃ½mu zpracuje jednu metodu vyuÂÃ­vajÃ­cÃ­ tento histogram, a
+to jak s pomocÃ­ OpenCL tak CPU implementaci. VÃ½slednÃ½ program umoÂnÃ­ vybrat
+vstupnÃ­ obrÃ¡zek a metodu, kterou provede obÄ›ma zpÅ¯soby, a vypÃ­Âše Äas
+provedenÃ­ kaÂdÃ©ho z nich a zobrazÃ­ vÃ½stupnÃ­ obrÃ¡zek.
 
-Zpùsob vyhodnocení:
-        Dosaené urychlení OpenCL implementace oproti CPU implementaci a
-korektnost vıstupu.
+ZpÅ¯sob vyhodnocenÃ­:
+        DosaÂenÃ© urychlenÃ­ OpenCL implementace oproti CPU implementaci a
+korektnost vÃ½stupu.
 
-Názvy pouitıch metod a zpùsob jejich vyuití:
-        - vıpoèet histogramu vstupního obrázku (z toho budou vycházet
-všechny tøi následující metody)
-        - ekvalizace histogramu - Jan Vybíral
-        - segmentace obrazu na základì prahování histogramu (Image
+NÃ¡zvy pouÂitÃ½ch metod a zpÅ¯sob jejich vyuÂitÃ­:
+        - vÃ½poÄet histogramu vstupnÃ­ho obrÃ¡zku (z toho budou vychÃ¡zet
+vÂšechny tÅ™i nÃ¡sledujÃ­cÃ­ metody)
+        - ekvalizace histogramu - Jan VybÃ­ral
+        - segmentace obrazu na zÃ¡kladÄ› prahovÃ¡nÃ­ histogramu (Image
 Segmentation by Histogram Thresholding) - Filip Zapletal
-           (doplòte vaše vybrané metody)
-        - prahování s pomocí metody Otsu - Lukáš Piják
+           (doplÅˆte vaÂše vybranÃ© metody)
+        - prahovÃ¡nÃ­ s pomocÃ­ metody Otsu - LukÃ¡Âš PijÃ¡k
 
-Nástroje:
-        MS Visual Studio, C++, OpenCL, SDL (jako ve cvièeních)
+NÃ¡stroje:
+        MS Visual Studio, C++, OpenCL, SDL (jako ve cviÄenÃ­ch)
 
-Reference na èlánky a jiné zdroje:
+Reference na ÄlÃ¡nky a jinÃ© zdroje:
         - http://en.wikipedia.org/wiki/Histogram_equalization
         - http://www.math.uci.edu/icamp/courses/math77c/demos/hist_eq.pdf
         - http://fourier.eng.hmc.edu/e161/lectures/contrast_transform/node2.html
         - http://www.cis.temple.edu/~latecki/Courses/CIS750-03/Lectures/Venu_project2.ppt
         - http://en.wikipedia.org/wiki/Otsu's_method
+        
+Dobry den,
+Predpokladam ze na vypoctu histogramu budete pracovat vsetci. Vyhybajte sa
+prosim pri rieseni pouziti atomickych instrukcii - prip. ich pouzite co
+najmenej. Atomicky increment v globalnej pameti nestaci do projektu ako
+"vypocet histogramu". Vypocet histogramu ked to riesite traja, by malo byt
+co najoptimalnejsi!
+Co sa tyka literatury, na MGM u projektoch aj u diplomkach Wikipedia nie je
+prijatelny zdroj. Na wiki strankach dole mate aj pouzitelne odkazy - bud
+pouzivajte tie alebo najdete vedecke clanky alebo knihy. To iste plati aj na
+prezentacie.
+Pri vyhodnoteni vytvorte aj grafy v zavislosti na poctu pixelov.
+S pozdravom,
+
+ISz 
