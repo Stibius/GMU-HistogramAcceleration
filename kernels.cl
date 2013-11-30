@@ -1,8 +1,7 @@
 
-
 #pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
 
-const uint HISTOGRAM_SIZE = 256;
+__constant uint HISTOGRAM_SIZE = 256;
 
 /*! Computes histogram of the input image in grayscale format with 255 levels of gray.
  *
