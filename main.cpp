@@ -47,7 +47,8 @@ cl_event event_histogram, event_equalize1, event_equalize2;
 
 /** Possible methods*/
 enum method_t {
-	EQUALIZE
+	EQUALIZE,
+	OTSU
 };
 
 method_t method; //method for execution
@@ -392,7 +393,7 @@ int setupCL()
 	//=================================================================================
 	// Create and compile and openCL program
 
-	char *cSourceCL = loadProgSource("../kernels.cl");
+	char *cSourceCL = loadProgSource("kernels.cl");
 	
 	program = clCreateProgramWithSource(context, 1, (const char **)&cSourceCL, NULL, &ciErr);  CheckOpenCLError( ciErr, "clCreateProgramWithSource" );
 	free(cSourceCL);
@@ -742,7 +743,15 @@ void runGpuEqualization2() {
    return;
 }
 
-
+void runCpuOtsu() 
+{
+	printf("Running CPU otsu implementation.\n");
+	volatile float t1 = getTime();
+	otsu(h_inputImageData, h_gpu_outputImageData, h_gpu_histogramData, width, height);
+	volatile float t2 = getTime();
+    float elapsedTime = (t2 - t1) * 1000.0f;
+    printf("CPU otsu:  elapsedTime %.3lf ms\n", elapsedTime);
+}
 
 int cleanup()
 {
@@ -807,6 +816,10 @@ int main(int argc, char* argv[])
 	if (!strcmp(argv[1], "equalize"))
 	{
 		method = EQUALIZE;
+	}
+	else if(!strcmp(argv[1], "otsu"))
+	{
+		method = OTSU;
 	}
 	else
 	{
@@ -881,6 +894,9 @@ void onInit()
 		runCpuEqualize();
 	    runGpuEqualization1();
 	    runGpuEqualization2();
+		break;
+	case OTSU:
+		runCpuOtsu();
 		break;
 	default:
 		break;

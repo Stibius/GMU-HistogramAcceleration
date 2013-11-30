@@ -13,5 +13,6 @@ const cl_uint HISTOGRAM_SIZE = 256;
  * \param[in] histogram histogram of the input image, 255 values
  */
 void equalize(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram);
+void otsu(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram, int width, int height);
 
 #endif
