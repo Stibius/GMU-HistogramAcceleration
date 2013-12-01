@@ -2,6 +2,10 @@
 #pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
 
 __constant uint HISTOGRAM_SIZE = 256;
+__constant uint SIZE_OF_BLOCK = 16;
+__constant uchar4 MIN_BRIGHTNESS = (0, 0, 0, 0);
+__constant uchar4 MAX_BRIGHTNESS = (255, 255, 255, 255);
+
 
 /*! Computes histogram of the input image in grayscale format with 255 levels of gray.
  *
@@ -45,8 +49,8 @@ __constant uint HISTOGRAM_SIZE = 256;
 	{
 	    int value = inputImage[globalY * width + globalX].x; //current pixel value
 
-		atomic_inc(&cache[value]); //updating cache
-		//cache[value]++;
+		//atomic_inc(&cache[value]); //updating cache
+		cache[value]++;
 
 		barrier(CLK_LOCAL_MEM_FENCE); //wait until all local workers have updated cache
 
@@ -114,6 +118,83 @@ __kernel void equalize2(__global uchar4* inputImage, __global uchar4* outputImag
 		outputImage[globalY * width + globalX] = (newValue, newValue, newValue, newValue); //write the new value to the output image
 	}
 	
+	return;
+}
+
+__kernel void threshold(__constant uint* histogram, __global ulong* sumHistogram)
+{
+	int gid = get_local_id(0);
+
+    local ulong sum[16];
+    sum[gid] = 0;
+	local ulong total[16];
+	total[gid] = 0;
+
+	float sumB = 0, varMax = 0, varBetween;
+	long wB = 0,  wF = 0, threshold = 0;
+	float mB, mF; 
+
+    int i;
+
+	for(i = gid*SIZE_OF_BLOCK; i < (gid*SIZE_OF_BLOCK)+SIZE_OF_BLOCK; i++)
+	{
+		sum[gid] += i * histogram[i];
+		total[gid] += histogram[i];
+	}
+	barrier(CLK_LOCAL_MEM_FENCE);
+
+	if(gid == 0){
+        for(i = 1; i < SIZE_OF_BLOCK; i++){
+            sum[0] += sum[i];
+			total[0] += total[i];
+        }
+
+		for (i = 0 ; i < 256; i++) {
+
+			wB += histogram[i];             // Weight Background
+      
+			if (wB == 0) 
+				continue;
+
+			wF = total[0] - wB;           // Weight Foreground
+			if (wF == 0) 
+				break;
+
+			sumB += (i * histogram[i]);
+
+			mB = sumB / wB;            // Mean Background 
+			mF = (sum[0] - sumB) / wF;    // Mean Foreground
+
+			// Calculate Between Class Variance 
+			varBetween = wB * wF * (mB - mF) * (mB - mF);
+
+			// Check if new maximum found 
+			if (varBetween > varMax) {
+				varMax = varBetween;
+				threshold = i+1;
+			}
+		}
+		sumHistogram[0] = threshold;
+	}
+	
+
+	return;
+}
+
+__kernel void thresholding(__global uchar4* inputImage, __global uchar4* outputImage, __global uint* threshold, uint width, uint height)
+{
+    uint globalX = get_global_id(0);
+	uint globalY = get_global_id(1);
+	
+	if (globalX < width && globalY < height)
+	{
+		if(inputImage[globalY * width + globalX].x > threshold[0]){
+			outputImage[globalY * width + globalX] = MAX_BRIGHTNESS;
+		} else {
+			outputImage[globalY * width + globalX] = MIN_BRIGHTNESS; 
+		}
+	}
+
 	return;
 }
 

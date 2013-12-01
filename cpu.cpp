@@ -32,16 +32,17 @@ void equalize(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram)
 
 void otsu(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram, int width, int height)
 {
-   long total = 0;
-   float sum = 0;
+   unsigned long total = 0;
+   unsigned long sum = 0;
    float sumB = 0, varMax = 0, varBetween;
    long wB = 0,  wF = 0, threshold = 0;
    float mB, mF;  
 
-   for (int i = 0 ; i < HISTOGRAM_SIZE ; i++) {
+   for (int i = 0 ; i < HISTOGRAM_SIZE; i++) {
       sum += i * histogram[i];
       total += histogram[i];
    }
+
 
    for (int i = 0 ; i < HISTOGRAM_SIZE; i++) {
 

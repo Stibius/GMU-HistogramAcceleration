@@ -34,7 +34,7 @@ cl_uint pixelSize = 32; //rgba 8bits per channel
 //opencl stuff
 cl_context context;
 cl_command_queue commandQueue;
-cl_kernel histogramKernel, equalizeKernel1, equalizeKernel2;
+cl_kernel histogramKernel, equalizeKernel1, equalizeKernel2, thresholdKernel, thresholdingKernel;
 cl_program program;
 
 /** CL memory buffer for images */
@@ -42,8 +42,9 @@ cl_mem d_inputImageBuffer = NULL;
 cl_mem d_histogramBuffer = NULL; 
 cl_mem d_outputImageBuffer = NULL; 
 cl_mem d_newValuesBuffer = NULL; //mezivypocet pri ekvalizaci
+cl_mem d_threshold = NULL;
 
-cl_event event_histogram, event_equalize1, event_equalize2;
+cl_event event_histogram, event_equalize1, event_equalize2, event_threshold, event_thresholding;
 
 /** Possible methods*/
 enum method_t {
@@ -387,7 +388,12 @@ int setupCL()
 										0, &ciErr);
 	CheckOpenCLError(ciErr, "Allocate eq histogram buffer");
 
-	
+	//treshhold
+	d_threshold  = clCreateBuffer(context,
+										CL_MEM_READ_WRITE,
+										sizeof(cl_ulong),
+										0, &ciErr);
+	CheckOpenCLError(ciErr, "Allocate eq treshhold buffer");	
 	
 
 	//=================================================================================
@@ -446,6 +452,10 @@ int setupCL()
 	CheckOpenCLError( ciErr, "clCreateKernel histogram" );
 	equalizeKernel2 = clCreateKernel(program, "equalize2", &ciErr);
 	CheckOpenCLError( ciErr, "clCreateKernel equalize2" );
+	thresholdKernel = clCreateKernel(program, "threshold", &ciErr);
+	CheckOpenCLError( ciErr, "clCreateKernel threshold" );
+	thresholdingKernel = clCreateKernel(program, "thresholding", &ciErr);
+	CheckOpenCLError( ciErr, "clCreateKernel thresholding" );
 
 	return 0;
 }
@@ -747,10 +757,172 @@ void runCpuOtsu()
 {
 	printf("Running CPU otsu implementation.\n");
 	volatile float t1 = getTime();
-	otsu(h_inputImageData, h_gpu_outputImageData, h_gpu_histogramData, width, height);
+	otsu(h_inputImageData, h_cpu_outputImageData, h_gpu_histogramData, width, height);
 	volatile float t2 = getTime();
     float elapsedTime = (t2 - t1) * 1000.0f;
     printf("CPU otsu:  elapsedTime %.3lf ms\n", elapsedTime);
+}
+
+void runGpuOtsu() 
+{
+	int status;
+
+	cl_ulong h_threshold[1];
+
+	/* Setup arguments to the kernel */
+
+	/* histogram buffer */
+	status = clSetKernelArg(thresholdKernel, 
+                            0, 
+                            sizeof(cl_mem), 
+                            &d_histogramBuffer);
+	
+	CheckOpenCLError(status, "clSetKernelArg. (histogram)");
+
+
+	/* output buffer */
+	status = clSetKernelArg(thresholdKernel, 
+	                        1, 
+	                        sizeof(cl_mem), 
+	                        &d_threshold);
+	CheckOpenCLError(status, "clSetKernelArg. (threshold)");
+	
+
+	//the global number of threads in each dimension has to be divisible
+	// by the local dimension numbers
+
+	size_t blockSizeX = 1;
+	size_t blockSizeY = 1;
+
+
+	checkWorkgroupSize(thresholdKernel, blockSizeX, blockSizeY);
+
+	size_t globalThreadsThreshold[] = { 16 };
+	size_t localThreadsThreshold[] = { 16 };
+
+	cl_event threshold_wait_events[] = { event_threshold };
+
+	status = clEnqueueNDRangeKernel(commandQueue,
+									thresholdKernel,
+									1, // Dimensions
+									NULL, //offset
+									globalThreadsThreshold,
+									localThreadsThreshold,
+									0, //num events in wait list
+									threshold_wait_events,
+									&event_threshold);
+
+	CheckOpenCLError(status, "clEnqueueNDRangeKernel.");
+
+	status = clWaitForEvents(1, &event_threshold);
+	CheckOpenCLError(status, "clWaitForEvents.");
+
+	//Read back the image - if textures were used for showing this wouldn't be necessary
+	//blocking read
+	status = clEnqueueReadBuffer(commandQueue,
+	                            d_threshold,
+                                CL_TRUE,
+                                0,
+                                sizeof(cl_ulong),
+                                h_threshold,
+                                0,
+                                0,
+                                0);
+	
+    CheckOpenCLError(status, "read threshold output.");
+
+	printTiming(event_threshold, "GPU threshold: ");
+
+	// thresholding 
+
+	/* Setup arguments to the kernel */
+
+    /* input buffer */
+    status = clSetKernelArg(thresholdingKernel, 
+                            0, 
+                            sizeof(cl_mem), 
+                            &d_inputImageBuffer);
+	CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
+
+	/* output buffer */
+	status = clSetKernelArg(thresholdingKernel, 
+	                        1, 
+	                        sizeof(cl_mem), 
+	                        &d_outputImageBuffer);
+	CheckOpenCLError(status, "clSetKernelArg. (outputImage)");
+
+	/* image threshold */
+    status = clSetKernelArg(thresholdingKernel, 
+                            2, 
+                            sizeof(cl_mem), 
+                            &d_threshold);
+
+	CheckOpenCLError(status, "clSetKernelArg. (threshold)");
+
+    /* image width */
+    status = clSetKernelArg(thresholdingKernel, 
+                            3, 
+                            sizeof(cl_uint), 
+                            &width);
+
+	CheckOpenCLError(status, "clSetKernelArg. (width)");
+
+	/* image height */
+    status = clSetKernelArg(thresholdingKernel, 
+                            4, 
+                            sizeof(cl_uint), 
+                            &height);
+
+	CheckOpenCLError(status, "clSetKernelArg. (height)");
+
+	//the global number of threads in each dimension has to be divisible
+	// by the local dimension numbers
+	blockSizeX = 16;
+	blockSizeY = 16;
+
+	checkWorkgroupSize(thresholdingKernel, blockSizeX, blockSizeY);
+
+	size_t globalThreadsthresholding[] = 
+	{
+		((width + blockSizeX - 1)/blockSizeX) * blockSizeX,
+		((height + blockSizeY - 1)/blockSizeY) * blockSizeY
+	};
+	size_t localThreadsthresholding[] = {blockSizeX, blockSizeY};
+
+	cl_event thresholding_wait_events[] = { event_thresholding };
+
+    status = clEnqueueNDRangeKernel(commandQueue,
+                                    thresholdingKernel,
+                                    2, // Dimensions
+                                    NULL, //offset
+                                    globalThreadsthresholding,
+                                    localThreadsthresholding,
+                                    0,
+                                    thresholding_wait_events,
+                                    &event_thresholding);
+    CheckOpenCLError(status, "clEnqueueNDRangeKernel.");
+
+    status = clWaitForEvents(1, &event_thresholding);
+    CheckOpenCLError(status, "clWaitForEvents.");
+
+	//Read back the histogram
+	//blocking read
+
+	status = clEnqueueReadBuffer(commandQueue,
+                                d_outputImageBuffer,
+                                CL_TRUE,
+                                0,
+								width * height * sizeof(cl_uchar4),
+                                h_gpu_outputImageData,
+                                0,
+                                0,
+                                0);
+		
+   CheckOpenCLError(status, "read output.");
+
+   printTiming(event_thresholding, "GPU thresholding: ");
+
+   return;
 }
 
 int cleanup()
@@ -824,7 +996,7 @@ int main(int argc, char* argv[])
 	else
 	{
 		cout << "Usage: gmu.exe <metoda> <cesta k obrazku>\n";
-		cout << "  <metoda> - Moznosti: equalize\n";
+		cout << "  <metoda> - Moznosti: equalize, otsu\n";
 
 		return 1;
 	}
@@ -897,6 +1069,7 @@ void onInit()
 		break;
 	case OTSU:
 		runCpuOtsu();
+		runGpuOtsu();
 		break;
 	default:
 		break;
