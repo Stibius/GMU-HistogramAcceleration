@@ -800,7 +800,7 @@ void runGpuOtsu()
 	size_t globalThreadsThreshold[] = { 16 };
 	size_t localThreadsThreshold[] = { 16 };
 
-	cl_event threshold_wait_events[] = { event_threshold };
+	cl_event threshold_wait_events[] = { event_histogram };
 
 	status = clEnqueueNDRangeKernel(commandQueue,
 									thresholdKernel,
@@ -808,7 +808,7 @@ void runGpuOtsu()
 									NULL, //offset
 									globalThreadsThreshold,
 									localThreadsThreshold,
-									0, //num events in wait list
+									1, //num events in wait list
 									threshold_wait_events,
 									&event_threshold);
 
@@ -889,7 +889,7 @@ void runGpuOtsu()
 	};
 	size_t localThreadsthresholding[] = {blockSizeX, blockSizeY};
 
-	cl_event thresholding_wait_events[] = { event_thresholding };
+	cl_event thresholding_wait_events[] = { event_threshold };
 
     status = clEnqueueNDRangeKernel(commandQueue,
                                     thresholdingKernel,
@@ -897,7 +897,7 @@ void runGpuOtsu()
                                     NULL, //offset
                                     globalThreadsthresholding,
                                     localThreadsthresholding,
-                                    0,
+                                    1,
                                     thresholding_wait_events,
                                     &event_thresholding);
     CheckOpenCLError(status, "clEnqueueNDRangeKernel.");
