@@ -3,9 +3,6 @@
 
 __constant uint HISTOGRAM_SIZE = 256;
 __constant uint SIZE_OF_BLOCK = 16;
-__constant uchar4 MIN_BRIGHTNESS = (0, 0, 0, 0);
-__constant uchar4 MAX_BRIGHTNESS = (255, 255, 255, 255);
-
 
 /*! Computes histogram of the input image in grayscale format with 255 levels of gray.
  *
@@ -189,9 +186,9 @@ __kernel void thresholding(__global uchar4* inputImage, __global uchar4* outputI
 	if (globalX < width && globalY < height)
 	{
 		if(inputImage[globalY * width + globalX].x > threshold[0]){
-			outputImage[globalY * width + globalX] = MAX_BRIGHTNESS;
+			outputImage[globalY * width + globalX] = (255, 255, 255, 255);
 		} else {
-			outputImage[globalY * width + globalX] = MIN_BRIGHTNESS; 
+			outputImage[globalY * width + globalX] = (0, 0, 0, 0); 
 		}
 	}
 
