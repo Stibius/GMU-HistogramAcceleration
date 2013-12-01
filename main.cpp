@@ -939,6 +939,12 @@ int cleanup()
 	status = clReleaseKernel(equalizeKernel2);
 	CheckOpenCLError(status, "clReleaseKernel equalize2.");
 
+	status = clReleaseKernel(thresholdKernel);
+	CheckOpenCLError(status, "clReleaseKernel threshold.");
+
+	status = clReleaseKernel(thresholdingKernel);
+	CheckOpenCLError(status, "clReleaseKernel thresholding.");
+
     status = clReleaseProgram(program);
     CheckOpenCLError(status, "clReleaseProgram.");
 
@@ -950,6 +956,9 @@ int cleanup()
 	
     status = clReleaseMemObject(d_outputImageBuffer);
     CheckOpenCLError(status, "clReleaseMemObject output");
+
+	status = clReleaseMemObject(d_threshold);
+    CheckOpenCLError(status, "clReleaseMemObject threshold");
 
     status = clReleaseCommandQueue(commandQueue);
     CheckOpenCLError(status, "clReleaseCommandQueue.");
