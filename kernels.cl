@@ -46,8 +46,8 @@ __constant uint SIZE_OF_BLOCK = 16;
 	{
 	    int value = inputImage[globalY * width + globalX].x; //current pixel value
 
-		//atomic_inc(&cache[value]); //updating cache
-		cache[value]++;
+		atomic_inc(&cache[value]); //updating cache
+		//cache[value]++;
 
 		barrier(CLK_LOCAL_MEM_FENCE); //wait until all local workers have updated cache
 

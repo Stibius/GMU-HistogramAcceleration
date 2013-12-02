@@ -3,6 +3,19 @@
 #define MIN_BRIGHTNESS 0
 #define MAX_BRIGHTNESS 255
 
+void histogram(cl_uchar4* inputImage, cl_uint* histogram, int width, int height)
+{
+	for (int i = 0; i < HISTOGRAM_SIZE; i++)
+	{
+		histogram[i] = 0;
+	}
+
+	for (int i = 0; i < (width*height); i++)
+	{
+		histogram[inputImage[i].s[0]]++;
+	}
+}
+
 void equalize(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram)
 {
 	int newValues[HISTOGRAM_SIZE]; //each value represents a new pixel value for a pixel value given by its index

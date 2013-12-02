@@ -23,6 +23,7 @@ SDL_Surface *screen;
 cl_uchar4* h_inputImageData = NULL;
 cl_uchar4* h_gpu_outputImageData = NULL;
 cl_uint* h_gpu_histogramData = NULL;
+cl_uint* h_cpu_histogramData = NULL;
 cl_uchar4* h_cpu_outputImageData = NULL;
 cl_uint* h_newValuesData = NULL; //mezivypocet pri ekvalizaci
 
@@ -210,13 +211,25 @@ int setupHost(const char *inputImageName)
 
 	memset(h_cpu_outputImageData, 0, width * height * sizeof(cl_uchar4));
 
-	//allocate histogram
+	//allocate cpu histogram
+
+	h_cpu_histogramData = (cl_uint *) malloc(HISTOGRAM_SIZE * sizeof(cl_uint));
+
+	if(h_cpu_histogramData == NULL)
+	{
+		logMessage(DEBUG_LEVEL_ERROR, "Failed to allocate memory for cpu histogram result data.");
+		return -1;
+	}
+
+	memset(h_cpu_histogramData, 0, HISTOGRAM_SIZE * sizeof(cl_uint));
+
+	//allocate gpu histogram
 
 	h_gpu_histogramData = (cl_uint *) malloc(HISTOGRAM_SIZE * sizeof(cl_uint));
 
 	if(h_gpu_histogramData == NULL)
 	{
-		logMessage(DEBUG_LEVEL_ERROR, "Failed to allocate memory for histogram result data.");
+		logMessage(DEBUG_LEVEL_ERROR, "Failed to allocate memory for gpu histogram result data.");
 		return -1;
 	}
 
@@ -582,6 +595,16 @@ void runGpuHistogram() {
    printTiming(event_histogram, "GPU Histogram: ");
 
    return;
+}
+
+void runCpuHistogram() 
+{
+	printf("Running CPU histogram implementation.\n");
+	volatile float t1 = getTime();
+	histogram(h_inputImageData, h_cpu_histogramData, width, height);
+	volatile float t2 = getTime();
+    float elapsedTime = (t2 - t1) * 1000.0f;
+    printf("CPU histogram:  elapsedTime %.3lf ms\n", elapsedTime);
 }
 
 void runCpuEqualize() 
@@ -976,6 +999,9 @@ int cleanup()
 	if(h_cpu_outputImageData)
         free(h_cpu_outputImageData);
 
+	if(h_cpu_histogramData)
+        free(h_cpu_histogramData);
+
 	if(h_gpu_histogramData)
         free(h_gpu_histogramData);
 
@@ -1045,7 +1071,16 @@ int main(int argc, char* argv[])
 
 void compareResults()
 {
-	bool different = false;
+	printf("Comparing gpu and cpu histogram:\n");
+	for (int i = 0; i < HISTOGRAM_SIZE; i++) 
+	{
+        if (h_cpu_histogramData[i] != h_gpu_histogramData[i]) 
+		{
+            printf("GPU and CPU histogams are different!\n");
+            break;
+        }
+		if (i == HISTOGRAM_SIZE - 1) printf("GPU and CPU histograms are the same!\n");
+    }
 
 	printf("Comparing gpu and cpu output:\n");
 	for (int i = 0; i < width * height; i++) 
@@ -1067,6 +1102,7 @@ void onInit()
 	if(setupCL() != 0)
 		return;
   
+	runCpuHistogram();
 	runGpuHistogram();
 
 	switch (method)
