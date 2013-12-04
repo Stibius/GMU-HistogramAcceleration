@@ -368,7 +368,6 @@ int setupCL()
         0 
     };
 
-
 	//create context
 	context = clCreateContext(cps, 1, &cdDevices[deviceIndex], NULL, NULL, &ciErr);  CheckOpenCLError( ciErr, "clCreateContext" );
 	//may use clCreateContextFromType than choose a device based on the returned devices
@@ -578,7 +577,7 @@ void runGpuHistogram() {
 	//size_t globalThreadsHistogram[] = { ((height + blockSizeY - 1)/blockSizeY) * blockSizeY };
     //size_t localThreadsHistogram[] = { blockSizeY };
 	size_t blockSizeX = 16;
-	size_t blockSizeY = 16;
+	size_t blockSizeY = 1;
 
 	checkWorkgroupSize(histogramKernel, blockSizeX, blockSizeY);
 
@@ -626,20 +625,20 @@ void runGpuHistogram() {
 void runCpuHistogram() 
 {
 	printf("Running CPU histogram implementation.\n");
-	volatile float t1 = getTime();
+	volatile double t1 = getTime();
 	histogram(h_inputImageData, h_cpu_histogramData, width, height);
-	volatile float t2 = getTime();
-    float elapsedTime = (t2 - t1) * 1000.0f;
+	volatile double t2 = getTime();
+    double elapsedTime = (t2 - t1) * 1000.0f;
     printf("CPU histogram:  elapsedTime %.3lf ms\n", elapsedTime);
 }
 
 void runCpuEqualize() 
 {
 	printf("Running CPU equalization implementation.\n");
-	volatile float t1 = getTime();
+	volatile double t1 = getTime();
 	equalize(h_inputImageData, h_cpu_outputImageData, h_gpu_histogramData);
-	volatile float t2 = getTime();
-    float elapsedTime = (t2 - t1) * 1000.0f;
+	volatile double t2 = getTime();
+    double elapsedTime = (t2 - t1) * 1000.0f;
     printf("CPU equalize:  elapsedTime %.3lf ms\n", elapsedTime);
 }
 
@@ -805,10 +804,10 @@ void runGpuEqualization2() {
 void runCpuOtsu() 
 {
 	printf("Running CPU otsu implementation.\n");
-	volatile float t1 = getTime();
+	volatile double t1 = getTime();
 	otsu(h_inputImageData, h_cpu_outputImageData, h_gpu_histogramData, width, height);
-	volatile float t2 = getTime();
-    float elapsedTime = (t2 - t1) * 1000.0f;
+	volatile double t2 = getTime();
+    double elapsedTime = (t2 - t1) * 1000.0f;
     printf("CPU otsu:  elapsedTime %.3lf ms\n", elapsedTime);
 }
 

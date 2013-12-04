@@ -59,7 +59,7 @@ void glCheckError(const char * title);
 /**
  * Return the number of seconds from the first call
  */
-float getTime();
+double getTime();
 
 /**
  *SDL wrapper functions

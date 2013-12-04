@@ -3,7 +3,6 @@
 #include <string.h>
 #include <stdarg.h>
 
-
 #ifdef _WIN32
 #include <windows.h>
 
@@ -12,19 +11,23 @@
  * of this function
  * @return The time in seconds
  */
-float getTime(void){
+double getTime(void){
+	
+	static int initialized = 0;
+    static LARGE_INTEGER frequency;
+    LARGE_INTEGER value;
 
-	static float startTime = -1;
-    SYSTEMTIME st;
+    if (!initialized) {                         							/* prvni volani */
+        initialized = 1;
+        if (QueryPerformanceFrequency(&frequency) == 0) {                   /* pokud hi-res pocitadlo neni podporovano */
+            //assert(0 && "HiRes timer is not available.");
+            exit(-1);
+        }
+    }
 
-    GetLocalTime(&st);
-    float seconds = st.wHour*3600.0f + st.wMinute*60.0f 
-		+ st.wSecond*1.0f + (st.wMilliseconds)/1000.0f;
-	if (startTime < 0) {
-		startTime = seconds;
-	}
-
-    return seconds - startTime;
+    //assert(QueryPerformanceCounter(&value) != 0 && "This should never happen.");  /* osetreni chyby */
+    QueryPerformanceCounter(&value);
+    return (double)value.QuadPart / (double)frequency.QuadPart;  			/* vrat hodnotu v sekundach */
 }
 #else 
 #include <sys/timeb.h>
@@ -34,16 +37,13 @@ float getTime(void){
  * of this function
  * @return The time in seconds
  */
-float getTime(void){
-    static time_t start = -1;
-    struct timeb currentTime;
-    //struct timezone tzz;
-    ftime(&currentTime);
-    if(start < 0){
-	start = currentTime.time;
+double getTime(void){
+    struct timeval tv;
+    if (gettimeofday(&tv, NULL) == -1) {        							/* vezmi cas */
+        //assert(0 && "gettimeofday does not work.");  						/* osetri chyby */
+        exit(-2);
     }
-    return (float)(currentTime.time-start) + 
-        (float)(currentTime.millitm)/1000.0f;
+    return (double)tv.tv_sec + (double)tv.tv_usec/1000000.;  				/* vrat cas v sekundach */
 }
 #endif
 
