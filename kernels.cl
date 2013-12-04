@@ -4,6 +4,7 @@
 __constant uint HISTOGRAM_SIZE = 256;
 __constant uint SIZE_OF_BLOCK = 16;
 
+
 /*! Computes histogram of the input image in grayscale format with 255 levels of gray.
  *
  * \param[in] inputImage input image in grayscale format with 255 levels of gray
@@ -195,4 +196,128 @@ __kernel void thresholding(__global uchar4* inputImage, __global uchar4* outputI
 	return;
 }
 
+/*! Image Segmentation by Adaptive Histogram Thresholding
+ *
+ * \param[in] inputImage input image in grayscale format with 255 levels of gray
+ * \param[out] outputImage an equalized input image in grayscale format with 255 levels of gray
+ * \param[in] width width of the input image
+ * \param[in] height height of the input image
+ */
+__kernel void segmentation(__global uchar4* inputImage, __global uchar4* outputImage, uint width, uint height)
+{
+    uint globalX = get_global_id(0);
+	uint globalY = get_global_id(1);
+	
+    //local histogram for every pixel (subimage)
+    int subHist[255];
+
+    int threshold;
+    int yy;
+    int xx;
+    int iter;
+    int i;
+    
+    //initial threshold 
+    threshold = 128;
+
+    //initialize memory
+    for (i = 0; i < HISTOGRAM_SIZE; i++) 
+	{
+	    subHist[i] = 0;
+	}
+    
+    //compute histogram of 31 x 31 subimage around pixel
+    for (yy = 0; yy <= 30; yy++)
+    {
+        int subPosY = globalY + yy - 15;
+
+        //check bounds
+        if (subPosY < 0 || subPosY >= height)
+            continue;
+
+        for (xx = 0; xx <= 30; xx++)
+        {
+            uint subPosX = globalX + xx - 15;
+            //check bounds
+            if (subPosX < 0 || subPosX >= width)
+                continue;
+
+            //modify histogram
+            subHist[inputImage[subPosY * width + subPosX].x]++;
+        }
+    }       
+    //i have histogram
+
+    
+    int mean1 = 0;
+    int mean2 = 0;
+    int newTh = 128;
+    long sum = 0;
+    long count = 0;
+
+    //iterrate and try to find "ideal" threshold
+    for (iter = 0; iter < 15; iter++)
+    {       
+        for (i = 0; i < 255; i++)
+        {
+            //separate histogram by threshold and compute mean of all values bellow nad above threshold
+            if (i <= threshold)
+            {
+                //lower part
+                count += subHist[i];
+                sum += subHist[i] * i;
+                    
+                if (i == threshold)
+                {
+                    //last
+                    if (count == 0) //if no valid samples, move mean to threshold
+                        mean1 = threshold;
+                    else
+                        mean1 = sum / count;
+                    sum = count = 0;
+                }
+            }
+            else
+            {
+                //upper part                        
+                count += subHist[i];
+                sum += subHist[i] * i;
+            }
+        }
+        if (count == 0) //if no valid samples, move mean to threshold
+            mean2 = threshold;
+        else
+            mean2 = sum / count;
+        sum = count = 0;
+
+        //compute new threshold
+        newTh = (mean1 + mean2) / 2;
+
+        //is aproximated? - no change
+        if (abs(newTh - threshold) < 3)
+            break;
+
+        threshold = newTh;
+    }
+    threshold = newTh;
+    
+    //dont let threshold move to borders
+    if (threshold < 20)
+        threshold = 20;
+           
+    if (threshold > 255 - 20)
+        threshold = 255 - 20;
+    
+    //perform segmentation
+    if (inputImage[globalY * width + globalX].x <= threshold)
+    {
+        outputImage[globalY * width + globalX] = (0, 0, 0, 0); 
+    }
+    else
+    {
+        outputImage[globalY * width + globalX] = (255, 255, 255, 255);
+    }
+    
+	return;
+}
 

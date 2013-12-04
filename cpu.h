@@ -6,6 +6,9 @@
 
 const cl_uint HISTOGRAM_SIZE = 256; 
 
+#define SEG_SUB_DIAMETER 15
+#define SEG_TH_BORDERS 20
+
 /*! Performs histogram equalization of the input image.
  *
  * \param[in] inputImage input image in grayscale format with 255 levels of gray
@@ -15,5 +18,6 @@ const cl_uint HISTOGRAM_SIZE = 256;
 void histogram(cl_uchar4* inputImage, cl_uint* histogram, int width, int height);
 void equalize(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram);
 void otsu(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram, int width, int height);
+void segmentation(cl_uchar4* inputImage, cl_uchar4* outputImage, int width, int height);
 
 #endif

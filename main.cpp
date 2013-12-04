@@ -35,7 +35,7 @@ cl_uint pixelSize = 32; //rgba 8bits per channel
 //opencl stuff
 cl_context context;
 cl_command_queue commandQueue;
-cl_kernel histogramKernel, equalizeKernel1, equalizeKernel2, thresholdKernel, thresholdingKernel;
+cl_kernel histogramKernel, equalizeKernel1, equalizeKernel2, thresholdKernel, thresholdingKernel, segKernel;
 cl_program program;
 
 /** CL memory buffer for images */
@@ -45,12 +45,13 @@ cl_mem d_outputImageBuffer = NULL;
 cl_mem d_newValuesBuffer = NULL; //mezivypocet pri ekvalizaci
 cl_mem d_threshold = NULL;
 
-cl_event event_histogram, event_equalize1, event_equalize2, event_threshold, event_thresholding;
+cl_event event_histogram, event_equalize1, event_equalize2, event_threshold, event_thresholding, event_seg;
 
 /** Possible methods*/
 enum method_t {
 	EQUALIZE,
-	OTSU
+	OTSU,
+    SEGMENTATION
 };
 
 method_t method; //method for execution
@@ -124,6 +125,29 @@ int drawOutputImage(SDL_Surface *screen){
 
 	
     SDL_Surface *temp = SDL_CreateRGBSurfaceFrom(h_gpu_outputImageData,
+        width, height, pixelSize, width*4, 
+        0x0000ff, 0x00ff00, 0xff0000, 0xff000000);
+    SDL_Rect rec;
+ 
+    rec.x = 0;
+    rec.y = 0;
+    rec.w = width;
+    rec.h = height;
+    
+    SDL_Surface *output = SDL_DisplayFormatAlpha(temp);
+    SDL_BlitSurface(output, &rec, screen, &rec);
+    SDL_FreeSurface(temp);
+    SDL_FreeSurface(output);
+    return 0;
+}
+
+/**
+ * Draw the output image to sdl surface
+ */
+int drawOutputImageCPU(SDL_Surface *screen){
+
+	
+    SDL_Surface *temp = SDL_CreateRGBSurfaceFrom(h_cpu_outputImageData,
         width, height, pixelSize, width*4, 
         0x0000ff, 0x00ff00, 0xff0000, 0xff000000);
     SDL_Rect rec;
@@ -469,6 +493,8 @@ int setupCL()
 	CheckOpenCLError( ciErr, "clCreateKernel threshold" );
 	thresholdingKernel = clCreateKernel(program, "thresholding", &ciErr);
 	CheckOpenCLError( ciErr, "clCreateKernel thresholding" );
+    segKernel = clCreateKernel(program, "segmentation", &ciErr);
+	CheckOpenCLError( ciErr, "clCreateKernel segmentation" );
 
 	return 0;
 }
@@ -948,6 +974,102 @@ void runGpuOtsu()
    return;
 }
 
+void runCpuSeg() 
+{
+	printf("Running CPU segmentation implementation.\n");
+	volatile float t1 = getTime();
+    segmentation(h_inputImageData, h_cpu_outputImageData, width, height);
+	volatile float t2 = getTime();
+    float elapsedTime = (t2 - t1) * 1000.0f;
+    printf("CPU segmentation:  elapsedTime %.3lf ms\n", elapsedTime);
+}
+
+void runGpuSeg() 
+{
+	int status;
+    
+	/* Setup arguments to the kernel */
+
+    /* input buffer */
+    status = clSetKernelArg(segKernel, 
+                            0, 
+                            sizeof(cl_mem), 
+                            &d_inputImageBuffer);
+	CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
+
+	/* output buffer */
+	status = clSetKernelArg(segKernel, 
+	                        1, 
+	                        sizeof(cl_mem), 
+	                        &d_outputImageBuffer);
+	CheckOpenCLError(status, "clSetKernelArg. (outputImage)");
+    
+    /* image width */
+    status = clSetKernelArg(segKernel, 
+                            2, 
+                            sizeof(cl_uint), 
+                            &width);
+
+	CheckOpenCLError(status, "clSetKernelArg. (width)");
+
+	/* image height */
+    status = clSetKernelArg(segKernel, 
+                            3, 
+                            sizeof(cl_uint), 
+                            &height);
+
+	CheckOpenCLError(status, "clSetKernelArg. (height)");
+
+	//the global number of threads in each dimension has to be divisible
+	// by the local dimension numbers
+	size_t blockSizeX = 16;
+	size_t blockSizeY = 32;
+
+	checkWorkgroupSize(segKernel, blockSizeX, blockSizeY);
+
+	size_t globalSize[] = 
+	{
+		((width + blockSizeX - 1)/blockSizeX) * blockSizeX,
+		((height + blockSizeY - 1)/blockSizeY) * blockSizeY
+	};
+	size_t localSize[] = {blockSizeX, blockSizeY};
+
+	cl_event wait_events[] = { event_seg };
+
+    status = clEnqueueNDRangeKernel(commandQueue,
+                                    segKernel,
+                                    2, // Dimensions
+                                    NULL, //offset
+                                    globalSize,
+                                    localSize,
+                                    0,
+                                    NULL,
+                                    &event_seg);
+    CheckOpenCLError(status, "clEnqueueNDRangeKernel.");
+
+    status = clWaitForEvents(1, &event_seg);
+    CheckOpenCLError(status, "clWaitForEvents.");
+
+	//Read back the histogram
+	//blocking read
+
+	status = clEnqueueReadBuffer(commandQueue,
+                                d_outputImageBuffer,
+                                CL_TRUE,
+                                0,
+								width * height * sizeof(cl_uchar4),
+                                h_gpu_outputImageData,
+                                0,
+                                0,
+                                0);
+		
+   CheckOpenCLError(status, "read output.");
+
+   printTiming(event_seg, "GPU segmentation: ");
+
+   return;
+}
+
 int cleanup()
 {
 	/* Releases OpenCL resources (Context, Memory etc.) */
@@ -1015,7 +1137,7 @@ int main(int argc, char* argv[])
 {
 	if(argc != 3) {
 		cout << "Usage: gmu.exe <metoda> <cesta k obrazku>\n";
-		cout << "  <metoda> - Moznosti: equalize\n";
+		cout << "  <metoda> - Moznosti: equalize, otsu, segmentation\n";
 
 		return 1;
 	}
@@ -1028,10 +1150,14 @@ int main(int argc, char* argv[])
 	{
 		method = OTSU;
 	}
+    else if(!strcmp(argv[1], "segmentation"))
+	{
+        method = SEGMENTATION;
+	}
 	else
 	{
 		cout << "Usage: gmu.exe <metoda> <cesta k obrazku>\n";
-		cout << "  <metoda> - Moznosti: equalize, otsu\n";
+		cout << "  <metoda> - Moznosti: equalize, otsu, segmentation\n";
 
 		return 1;
 	}
@@ -1102,26 +1228,34 @@ void onInit()
 	if(setupCL() != 0)
 		return;
   
-	runCpuHistogram();
-	runGpuHistogram();
+	
 
 	switch (method)
 	{
 	case EQUALIZE:
+        runCpuHistogram();
+	    runGpuHistogram();
 		runCpuEqualize();
 	    runGpuEqualization1();
 	    runGpuEqualization2();
+        compareResults();
 		break;
 	case OTSU:
+        runCpuHistogram();
+	    runGpuHistogram();
 		runCpuOtsu();
 		runGpuOtsu();
+        compareResults();
+		break;
+    case SEGMENTATION:
+		runCpuSeg();
+		runGpuSeg();
 		break;
 	default:
 		break;
 	}
-	
 
-	compareResults();
+	
 }
 
 /**
