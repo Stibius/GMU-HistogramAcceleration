@@ -976,10 +976,10 @@ void runGpuOtsu()
 void runCpuSeg() 
 {
 	printf("Running CPU segmentation implementation.\n");
-	volatile float t1 = getTime();
+	volatile double t1 = getTime();
     segmentation(h_inputImageData, h_cpu_outputImageData, width, height);
-	volatile float t2 = getTime();
-    float elapsedTime = (t2 - t1) * 1000.0f;
+	volatile double t2 = getTime();
+    double elapsedTime = (t2 - t1) * 1000.0f;
     printf("CPU segmentation:  elapsedTime %.3lf ms\n", elapsedTime);
 }
 
