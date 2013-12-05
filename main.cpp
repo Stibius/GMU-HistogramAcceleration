@@ -615,7 +615,7 @@ void runGpuHistogram1() {
 	//size_t globalThreadsHistogram[] = { ((height + blockSizeY - 1)/blockSizeY) * blockSizeY };
     //size_t localThreadsHistogram[] = { blockSizeY };
 	size_t blockSizeX = 16;
-	size_t blockSizeY = 1;
+	size_t blockSizeY = 16;
 
 	checkWorkgroupSize(histogramKernel1, blockSizeX, blockSizeY);
 
