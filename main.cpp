@@ -711,10 +711,12 @@ void runGpuHistogram2() {
 	size_t blockSizeY = 1;
 
 	checkWorkgroupSize(histogramKernel2a, blockSizeX, blockSizeY);
+    
+    int roundedGlobalSize = ((globalThreadsHistogram2a + localThreadsHistogram2a - 1)/localThreadsHistogram2a) * localThreadsHistogram2a;
 
 	size_t globalThreads[] = 
 	{
-		globalThreadsHistogram2a
+		roundedGlobalSize //globalThreadsHistogram2a
 	};
 	size_t localThreads[] = {localThreadsHistogram2a};
 
