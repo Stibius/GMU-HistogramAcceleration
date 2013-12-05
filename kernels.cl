@@ -71,6 +71,8 @@ __kernel void histogram2a(__global uchar4* inputImage, __local uchar* sharedArra
     size_t groupId = get_group_id(0);
     size_t groupSize = get_local_size(0);
 
+    
+
     for(int i = 0; i < HISTOGRAM_SIZE; ++i)
         sharedArray[localId * HISTOGRAM_SIZE + i] = 0;
 
@@ -78,8 +80,11 @@ __kernel void histogram2a(__global uchar4* inputImage, __local uchar* sharedArra
     
     for(int i = 0; i < HISTOGRAM_SIZE; ++i)
     {
-        uint value = inputImage[globalId * HISTOGRAM_SIZE + i].x;
-        sharedArray[localId * HISTOGRAM_SIZE + value]++;
+        if (globalId < ((width * height) / HISTOGRAM_SIZE))
+        {
+            uint value = inputImage[globalId * HISTOGRAM_SIZE + i].x;
+            sharedArray[localId * HISTOGRAM_SIZE + value]++;
+        }
     }
     
     barrier(CLK_LOCAL_MEM_FENCE); 

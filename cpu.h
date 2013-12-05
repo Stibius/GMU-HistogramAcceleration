@@ -16,7 +16,7 @@ const cl_uint HISTOGRAM_SIZE = 256;
  * \param[in] histogram histogram of the input image, 255 values
  */
 void histogram(cl_uchar4* inputImage, cl_uint* histogram, int width, int height);
-void equalize(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram);
+void equalize(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram, float numberOfPixels);
 void otsu(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram, int width, int height);
 void segmentation(cl_uchar4* inputImage, cl_uchar4* outputImage, int width, int height);
 

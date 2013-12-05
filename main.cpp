@@ -205,7 +205,7 @@ int setupHost(const char *inputImageName)
 	localThreadsHistogram2a = 128;
 	globalThreadsHistogram2a = (width * height) / HISTOGRAM_SIZE; //512 * 512 / 256 = 1024
 	
-	numSubHistograms = globalThreadsHistogram2a / localThreadsHistogram2a;
+	numSubHistograms = ((globalThreadsHistogram2a + localThreadsHistogram2a - 1)/localThreadsHistogram2a); //globalThreadsHistogram2a / localThreadsHistogram2a;
 
 	//allocate input image
 
@@ -826,7 +826,7 @@ void runCpuEqualize()
 {
 	printf("Running CPU equalization implementation.\n");
 	volatile double t1 = getTime();
-	equalize(h_inputImageData, h_cpu_outputImageData, h_gpu_histogramData);
+    equalize(h_inputImageData, h_cpu_outputImageData, h_gpu_histogramData, width * height);
 	volatile double t2 = getTime();
     double elapsedTime = (t2 - t1) * 1000.0f;
     printf("CPU equalize:  elapsedTime %.3lf ms\n", elapsedTime);

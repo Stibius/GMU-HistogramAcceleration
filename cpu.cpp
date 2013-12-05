@@ -21,7 +21,7 @@ void histogram(cl_uchar4* inputImage, cl_uint* histogram, int width, int height)
 	}
 }
 
-void equalize(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram)
+void equalize(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram, float numberOfPixels)
 {
 	int newValues[HISTOGRAM_SIZE]; //each value represents a new pixel value for a pixel value given by its index
 
@@ -32,7 +32,7 @@ void equalize(cl_uchar4* inputImage, cl_uchar4* outputImage, cl_uint* histogram)
 	    newValues[i] = newValues[i-1] + histogram[i];
 	}
 
-	float numberOfPixels = newValues[HISTOGRAM_SIZE-1]; //number of pixels in the input image is the last value in the cumulative histogram
+	//float numberOfPixels = width * height;//newValues[HISTOGRAM_SIZE-1]; //number of pixels in the input image is the last value in the cumulative histogram
 
 	//computing the new pixel values
 	for (int i = 0; i < HISTOGRAM_SIZE; i++)
