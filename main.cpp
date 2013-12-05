@@ -23,6 +23,7 @@ SDL_Surface *screen;
 cl_uchar4* h_inputImageData = NULL;
 cl_uchar4* h_gpu_outputImageData = NULL;
 cl_uint* h_gpu_histogramData = NULL;
+cl_uint* h_gpu_histogramData2 = NULL;
 cl_uint* h_cpu_histogramData = NULL;
 cl_uchar4* h_cpu_outputImageData = NULL;
 cl_uint* h_newValuesData = NULL; //mezivypocet pri ekvalizaci
@@ -30,22 +31,27 @@ cl_uint* h_newValuesData = NULL; //mezivypocet pri ekvalizaci
 //width and height of the image
 int width = 0, height = 0;
 
+int localThreadsHistogram2a;
+int numSubHistograms;
+int globalThreadsHistogram2a;
+
 cl_uint pixelSize = 32; //rgba 8bits per channel
 
 //opencl stuff
 cl_context context;
 cl_command_queue commandQueue;
-cl_kernel histogramKernel, equalizeKernel1, equalizeKernel2, thresholdKernel, thresholdingKernel, segKernel;
+cl_kernel histogramKernel1, histogramKernel2a, histogramKernel2b, equalizeKernel1, equalizeKernel2, thresholdKernel, thresholdingKernel, segKernel;
 cl_program program;
 
 /** CL memory buffer for images */
 cl_mem d_inputImageBuffer = NULL; 
 cl_mem d_histogramBuffer = NULL; 
+cl_mem d_subHistogramsBuffer = NULL;
 cl_mem d_outputImageBuffer = NULL; 
 cl_mem d_newValuesBuffer = NULL; //mezivypocet pri ekvalizaci
 cl_mem d_threshold = NULL;
 
-cl_event event_histogram, event_equalize1, event_equalize2, event_threshold, event_thresholding, event_seg;
+cl_event event_histogram1, event_histogram2, event_equalize1, event_equalize2, event_threshold, event_thresholding, event_seg;
 
 /** Possible methods*/
 enum method_t {
@@ -55,6 +61,7 @@ enum method_t {
 };
 
 method_t method; //method for execution
+int histogramMethod = 1;
 
 //vola se po provedeni kernelu
 int printTiming(cl_event event, const char* title){
@@ -195,6 +202,11 @@ int setupHost(const char *inputImageName)
 	width = inputImage->w;
 	height = inputImage->h;
 
+	localThreadsHistogram2a = 128;
+	globalThreadsHistogram2a = (width * height) / HISTOGRAM_SIZE; //512 * 512 / 256 = 1024
+	
+	numSubHistograms = globalThreadsHistogram2a / localThreadsHistogram2a;
+
 	//allocate input image
 
 	h_inputImageData = (cl_uchar4*) malloc(width * height * sizeof(cl_uchar4));
@@ -258,6 +270,18 @@ int setupHost(const char *inputImageName)
 	}
 
 	memset(h_gpu_histogramData, 0, HISTOGRAM_SIZE * sizeof(cl_uint));
+
+	//allocate gpu histogram 2
+
+	h_gpu_histogramData2 = (cl_uint *) malloc(numSubHistograms * HISTOGRAM_SIZE * sizeof(cl_uint));
+
+	if(h_gpu_histogramData2 == NULL)
+	{
+		logMessage(DEBUG_LEVEL_ERROR, "Failed to allocate memory for gpu histogram result data 2.");
+		return -1;
+	}
+
+	memset(h_gpu_histogramData2, 0, ((width *height) / (HISTOGRAM_SIZE * localThreadsHistogram2a)) * HISTOGRAM_SIZE * sizeof(cl_uint));
 
 	//allocate array for new values after equalization
 
@@ -417,6 +441,16 @@ int setupCL()
 										0, &ciErr);
 	CheckOpenCLError(ciErr, "Allocate histogram buffer");
 
+	//histogram buffer 2
+	if (histogramMethod == 2)
+	{
+	    d_subHistogramsBuffer = clCreateBuffer(context,
+										CL_MEM_READ_WRITE,
+										((width *height) / (HISTOGRAM_SIZE * localThreadsHistogram2a)) * HISTOGRAM_SIZE * sizeof(cl_uint), // Histogram result - unsigned integer values (colors of grey) of occurence
+										0, &ciErr);
+	    CheckOpenCLError(ciErr, "Allocate subhistograms buffer");
+	}
+
 	//eq histogram buffer
 	d_newValuesBuffer = clCreateBuffer(context,
 										CL_MEM_READ_WRITE,
@@ -484,8 +518,12 @@ int setupCL()
 	// kernels
 	equalizeKernel1 = clCreateKernel(program, "equalize1", &ciErr);
 	CheckOpenCLError( ciErr, "clCreateKernel equalize1" );
-	histogramKernel = clCreateKernel(program, "histogram", &ciErr);
-	CheckOpenCLError( ciErr, "clCreateKernel histogram" );
+	histogramKernel1 = clCreateKernel(program, "histogram1", &ciErr);
+	CheckOpenCLError( ciErr, "clCreateKernel histogram1" );
+	histogramKernel2a = clCreateKernel(program, "histogram2a", &ciErr);
+	CheckOpenCLError( ciErr, "clCreateKernel histogram2a" );
+	histogramKernel2b = clCreateKernel(program, "histogram2b", &ciErr);
+	CheckOpenCLError( ciErr, "clCreateKernel histogram2b" );
 	equalizeKernel2 = clCreateKernel(program, "equalize2", &ciErr);
 	CheckOpenCLError( ciErr, "clCreateKernel equalize2" );
 	thresholdKernel = clCreateKernel(program, "threshold", &ciErr);
@@ -528,20 +566,20 @@ int checkWorkgroupSize(cl_kernel &pkernel, size_t &blockSizeX, size_t &blockSize
 	return EXIT_SUCCESS;	
 }
 
-void runGpuHistogram() {
+void runGpuHistogram1() {
 	int status;
 
 	/* Setup arguments to the kernel */
 
     /* input buffer */
-    status = clSetKernelArg(histogramKernel, 
+    status = clSetKernelArg(histogramKernel1, 
                             0, 
                             sizeof(cl_mem), 
                             &d_inputImageBuffer);
 	CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
 
     /* image width */
-    status = clSetKernelArg(histogramKernel, 
+    status = clSetKernelArg(histogramKernel1, 
                             1, 
                             sizeof(cl_uint), 
                             &width);
@@ -549,7 +587,7 @@ void runGpuHistogram() {
 	CheckOpenCLError(status, "clSetKernelArg. (width)");
 
 	/* image height */
-    status = clSetKernelArg(histogramKernel, 
+    status = clSetKernelArg(histogramKernel1, 
                             2, 
                             sizeof(cl_uint), 
                             &height);
@@ -557,7 +595,7 @@ void runGpuHistogram() {
 	CheckOpenCLError(status, "clSetKernelArg. (height)");
     
 	/* histogram buffer */
-	status = clSetKernelArg(histogramKernel, 
+	status = clSetKernelArg(histogramKernel1, 
                             3, 
                             sizeof(cl_mem), 
                             &d_histogramBuffer);
@@ -565,7 +603,7 @@ void runGpuHistogram() {
 	CheckOpenCLError(status, "clSetKernelArg. (histogram)");
 
     /* cache */
-	status = clSetKernelArg(histogramKernel, 
+	status = clSetKernelArg(histogramKernel1, 
 	                        4, 
 							HISTOGRAM_SIZE * sizeof(cl_uint),
 	                        0);
@@ -579,7 +617,7 @@ void runGpuHistogram() {
 	size_t blockSizeX = 16;
 	size_t blockSizeY = 1;
 
-	checkWorkgroupSize(histogramKernel, blockSizeX, blockSizeY);
+	checkWorkgroupSize(histogramKernel1, blockSizeX, blockSizeY);
 
 	size_t globalThreadsHistogram[] = 
 	{
@@ -589,17 +627,17 @@ void runGpuHistogram() {
 	size_t localThreadsHistogram[] = {blockSizeX, blockSizeY};
 
     status = clEnqueueNDRangeKernel(commandQueue,
-                                    histogramKernel,
+                                    histogramKernel1,
                                     2, // Dimensions
                                     NULL, //offset
                                     globalThreadsHistogram,
                                     localThreadsHistogram,
                                     0,
                                     NULL,
-                                    &event_histogram);
+                                    &event_histogram1);
     CheckOpenCLError(status, "clEnqueueNDRangeKernel.");
 
-    status = clWaitForEvents(1, &event_histogram);
+    status = clWaitForEvents(1, &event_histogram1);
     CheckOpenCLError(status, "clWaitForEvents.");
 
 	//Read back the histogram
@@ -617,7 +655,157 @@ void runGpuHistogram() {
 		
    CheckOpenCLError(status, "read histogram.");
 
-   printTiming(event_histogram, "GPU Histogram: ");
+   printTiming(event_histogram1, "GPU Histogram 1: ");
+
+   return;
+}
+
+void runGpuHistogram2() {
+	int status;
+
+//////////////KERNEL 2A////////////////////////////////////////////////////////////////////////////////////////
+
+	/* Setup arguments to the kernel */
+
+    /* input buffer */
+    status = clSetKernelArg(histogramKernel2a, 
+                            0, 
+                            sizeof(cl_mem), 
+                            &d_inputImageBuffer);
+	CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
+
+    /* image width */
+    status = clSetKernelArg(histogramKernel2a, 
+                            3, 
+                            sizeof(cl_uint), 
+                            &width);
+
+	CheckOpenCLError(status, "clSetKernelArg. (width)");
+
+	/* image height */
+    status = clSetKernelArg(histogramKernel2a, 
+                            4, 
+                            sizeof(cl_uint), 
+                            &height);
+
+	CheckOpenCLError(status, "clSetKernelArg. (height)");
+
+	/* shared array buffer */
+    status = clSetKernelArg(histogramKernel2a, 
+                            1, 
+                            localThreadsHistogram2a * HISTOGRAM_SIZE * sizeof(cl_uchar), 
+                            0);
+	CheckOpenCLError(status, "clSetKernelArg. (sharedArray)");
+    
+	/* subhistograms buffer */
+	status = clSetKernelArg(histogramKernel2a, 
+                            2, 
+                            sizeof(cl_mem), 
+                            &d_subHistogramsBuffer);
+	
+	CheckOpenCLError(status, "clSetKernelArg. (subHistograms)");
+
+	//the global number of threads in each dimension has to be divisible
+	// by the local dimension numbers
+	size_t blockSizeX = localThreadsHistogram2a;
+	size_t blockSizeY = 1;
+
+	checkWorkgroupSize(histogramKernel2a, blockSizeX, blockSizeY);
+
+	size_t globalThreads[] = 
+	{
+		globalThreadsHistogram2a
+	};
+	size_t localThreads[] = {localThreadsHistogram2a};
+
+    status = clEnqueueNDRangeKernel(commandQueue,
+                                    histogramKernel2a,
+									1,
+                                    NULL, //offset
+                                    globalThreads,
+                                    localThreads,
+                                    0,
+                                    NULL,
+                                    &event_histogram2);
+    CheckOpenCLError(status, "clEnqueueNDRangeKernel.");
+
+    status = clWaitForEvents(1, &event_histogram2);
+    CheckOpenCLError(status, "clWaitForEvents.");
+
+   printTiming(event_histogram2, "GPU Histogram 2a: ");
+
+//////////////KERNEL 2B////////////////////////////////////////////////////////////////////////////////////////
+
+   /* Setup arguments to the kernel */
+
+    /* subhistograms */
+    status = clSetKernelArg(histogramKernel2b, 
+                            0, 
+                            sizeof(cl_mem), 
+                            &d_subHistogramsBuffer);
+	CheckOpenCLError(status, "clSetKernelArg. (subHistograms)");
+
+    /* output histogram */
+    status = clSetKernelArg(histogramKernel2b, 
+                            1, 
+                            sizeof(cl_mem), 
+                            &d_histogramBuffer);
+
+	CheckOpenCLError(status, "clSetKernelArg. (histogram)");
+
+	/* number of subhistograms */
+    status = clSetKernelArg(histogramKernel2b, 
+                            2, 
+                            sizeof(cl_uint), 
+                            &numSubHistograms);
+
+	CheckOpenCLError(status, "clSetKernelArg. (numSubHistograms)");
+
+	//the global number of threads in each dimension has to be divisible
+	// by the local dimension numbers
+	blockSizeX = 256;
+	blockSizeY = 1;
+
+	checkWorkgroupSize(histogramKernel2b, blockSizeX, blockSizeY);
+
+	size_t globalThreadsHistogram2b[] = 
+	{
+		256
+	};
+	size_t localThreadsHistogram2b[] = {256};
+
+	cl_event histogram2b_wait_events[] = { event_histogram2 };
+
+    status = clEnqueueNDRangeKernel(commandQueue,
+                                    histogramKernel2b,
+									1,
+                                    NULL, //offset
+                                    globalThreadsHistogram2b,
+                                    localThreadsHistogram2b,
+                                    1,
+                                    histogram2b_wait_events,
+                                    &event_histogram1);
+    CheckOpenCLError(status, "clEnqueueNDRangeKernel.");
+
+    status = clWaitForEvents(1, &event_histogram1);
+    CheckOpenCLError(status, "clWaitForEvents.");
+	
+	//Read back the histogram
+	//blocking read
+
+	status = clEnqueueReadBuffer(commandQueue,
+                                d_histogramBuffer,
+                                CL_TRUE,
+                                0,
+								HISTOGRAM_SIZE * sizeof(cl_uint),
+                                h_gpu_histogramData,
+                                0,
+                                0,
+                                0);
+		
+   CheckOpenCLError(status, "read histogram.");
+
+   printTiming(event_histogram1, "GPU Histogram 2b: ");
 
    return;
 }
@@ -664,7 +852,7 @@ void runGpuEqualization1() {
 	size_t blockSizeX = 1;
 	size_t blockSizeY = 1;
 
-	checkWorkgroupSize(histogramKernel, blockSizeX, blockSizeY);
+	checkWorkgroupSize(histogramKernel1, blockSizeX, blockSizeY);
 
 	size_t globalThreadsEqualize1[] = 
 	{
@@ -672,7 +860,7 @@ void runGpuEqualization1() {
 	};
 	size_t localThreadsEqualize1[] = { 256 };
 
-	cl_event equalize_wait_events[] = { event_histogram };
+	cl_event equalize_wait_events[] = { event_histogram1 };
 
 	status = clEnqueueNDRangeKernel(commandQueue,
 		equalizeKernel1,
@@ -756,7 +944,7 @@ void runGpuEqualization2() {
 	size_t blockSizeX = 16;
 	size_t blockSizeY = 16;
 
-	checkWorkgroupSize(histogramKernel, blockSizeX, blockSizeY);
+	checkWorkgroupSize(histogramKernel1, blockSizeX, blockSizeY);
 
 	size_t globalThreadsEqualize2[] = 
 	{
@@ -848,7 +1036,7 @@ void runGpuOtsu()
 	size_t globalThreadsThreshold[] = { 16 };
 	size_t localThreadsThreshold[] = { 16 };
 
-	cl_event threshold_wait_events[] = { event_histogram };
+	cl_event threshold_wait_events[] = { event_histogram1 };
 
 	status = clEnqueueNDRangeKernel(commandQueue,
 									thresholdKernel,
@@ -1074,8 +1262,14 @@ int cleanup()
 	/* Releases OpenCL resources (Context, Memory etc.) */
     cl_int status;
 
-    status = clReleaseKernel(histogramKernel);
-    CheckOpenCLError(status, "clReleaseKernel histogram.");
+    status = clReleaseKernel(histogramKernel1);
+    CheckOpenCLError(status, "clReleaseKernel histogram1.");
+
+	status = clReleaseKernel(histogramKernel2a);
+    CheckOpenCLError(status, "clReleaseKernel histogram2a.");
+
+	status = clReleaseKernel(histogramKernel2b);
+    CheckOpenCLError(status, "clReleaseKernel histogram2b.");
 
 	status = clReleaseKernel(equalizeKernel1);
 	CheckOpenCLError(status, "clReleaseKernel equalize1.");
@@ -1097,6 +1291,12 @@ int cleanup()
     
     status = clReleaseMemObject(d_histogramBuffer);
     CheckOpenCLError(status, "clReleaseMemObject histogram");
+
+	if (histogramMethod == 2)
+	{
+	    status = clReleaseMemObject(d_subHistogramsBuffer);
+        CheckOpenCLError(status, "clReleaseMemObject histogram 2");
+	}
 	
     status = clReleaseMemObject(d_outputImageBuffer);
     CheckOpenCLError(status, "clReleaseMemObject output");
@@ -1126,6 +1326,9 @@ int cleanup()
 	if(h_gpu_histogramData)
         free(h_gpu_histogramData);
 
+	if(h_gpu_histogramData2)
+        free(h_gpu_histogramData2);
+
 	if(h_newValuesData)
         free(h_newValuesData);
 
@@ -1134,28 +1337,47 @@ int cleanup()
 
 int main(int argc, char* argv[])
 {
-	if(argc != 3) {
-		cout << "Usage: gmu.exe <metoda> <cesta k obrazku>\n";
+	if(argc != 4) {
+		cout << "Usage: gmu.exe <metoda histogramu> <metoda> <cesta k obrazku>\n";
+		cout << "  <metoda histogramu> - Moznosti: hist1, hist2\n";
 		cout << "  <metoda> - Moznosti: equalize, otsu, segmentation\n";
 
 		return 1;
 	}
 
-	if (!strcmp(argv[1], "equalize"))
+	if(!strcmp(argv[1], "hist1"))
+	{
+		histogramMethod = 1;
+	}
+    else if(!strcmp(argv[1], "hist2"))
+	{
+        histogramMethod = 2;
+	}
+	else
+	{
+		cout << "Usage: gmu.exe <metoda histogramu> <metoda> <cesta k obrazku>\n";
+		cout << "  <metoda histogramu> - Moznosti: hist1, hist2\n";
+		cout << "  <metoda> - Moznosti: equalize, otsu, segmentation\n";
+
+		return 1;
+	}
+
+	if (!strcmp(argv[2], "equalize"))
 	{
 		method = EQUALIZE;
 	}
-	else if(!strcmp(argv[1], "otsu"))
+	else if(!strcmp(argv[2], "otsu"))
 	{
 		method = OTSU;
 	}
-    else if(!strcmp(argv[1], "segmentation"))
+    else if(!strcmp(argv[2], "segmentation"))
 	{
         method = SEGMENTATION;
 	}
 	else
 	{
-		cout << "Usage: gmu.exe <metoda> <cesta k obrazku>\n";
+		cout << "Usage: gmu.exe <metoda histogramu> <metoda> <cesta k obrazku>\n";
+		cout << "  <metoda histogramu> - Moznosti: hist1, hist2\n";
 		cout << "  <metoda> - Moznosti: equalize, otsu, segmentation\n";
 
 		return 1;
@@ -1179,7 +1401,7 @@ int main(int argc, char* argv[])
 #endif
 
 	//load image
-	if(setupHost(argv[2]) != 0)
+	if(setupHost(argv[3]) != 0)
 	{
 		cleanup();
 		return 1;
@@ -1233,7 +1455,10 @@ void onInit()
 	{
 	case EQUALIZE:
         runCpuHistogram();
-	    runGpuHistogram();
+		if (histogramMethod == 1)
+	        runGpuHistogram1();
+		else if (histogramMethod == 2)
+			runGpuHistogram2();
 		runCpuEqualize();
 	    runGpuEqualization1();
 	    runGpuEqualization2();
@@ -1241,7 +1466,10 @@ void onInit()
 		break;
 	case OTSU:
         runCpuHistogram();
-	    runGpuHistogram();
+	    if (histogramMethod == 1)
+	        runGpuHistogram1();
+		else if (histogramMethod == 2)
+			runGpuHistogram2();
 		runCpuOtsu();
 		runGpuOtsu();
         compareResults();

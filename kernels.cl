@@ -4,7 +4,6 @@
 __constant uint HISTOGRAM_SIZE = 256;
 __constant uint SIZE_OF_BLOCK = 16;
 
-
 /*! Computes histogram of the input image in grayscale format with 255 levels of gray.
  *
  * \param[in] inputImage input image in grayscale format with 255 levels of gray
@@ -13,7 +12,8 @@ __constant uint SIZE_OF_BLOCK = 16;
  * \param[out] histogram resulting histogram, an array of 255 integer values
  * \param[in] cache used for histogram values of a workgroup
  */
- __kernel void histogram( __global uchar4* inputImage, uint width, uint height, __global uint* histogram, __local uint* cache)
+ 
+ __kernel void histogram1( __global uchar4* inputImage, uint width, uint height, __global uint* histogram, __local uint* cache)
 {
     //two dimensional matrix of work items
 	int globalX = get_global_id(0);
@@ -41,7 +41,6 @@ __constant uint SIZE_OF_BLOCK = 16;
 	
 	//wait until all local workers have initialized cache
 	barrier(CLK_LOCAL_MEM_FENCE);
-	barrier(CLK_GLOBAL_MEM_FENCE);
 
 	if (globalX < width && globalY < height) //check if we are out of bounds
 	{
@@ -64,6 +63,50 @@ __constant uint SIZE_OF_BLOCK = 16;
 
 	} 
 }
+
+__kernel void histogram2a(__global uchar4* inputImage, __local uchar* sharedArray, __global uint* subHistograms, uint width, uint height)
+{
+	size_t localId = get_local_id(0);
+    size_t globalId = get_global_id(0);
+    size_t groupId = get_group_id(0);
+    size_t groupSize = get_local_size(0);
+
+    for(int i = 0; i < HISTOGRAM_SIZE; ++i)
+        sharedArray[localId * HISTOGRAM_SIZE + i] = 0;
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+    
+    for(int i = 0; i < HISTOGRAM_SIZE; ++i)
+    {
+        uint value = inputImage[globalId * HISTOGRAM_SIZE + i].x;
+        sharedArray[localId * HISTOGRAM_SIZE + value]++;
+    }
+    
+    barrier(CLK_LOCAL_MEM_FENCE); 
+    
+    for(int i = 0; i < HISTOGRAM_SIZE / groupSize; ++i)
+    {
+        uint binCount = 0;
+        for(int j = 0; j < groupSize; ++j)
+            binCount += sharedArray[j * HISTOGRAM_SIZE + i * groupSize + localId];
+            
+        subHistograms[groupId * HISTOGRAM_SIZE + i * groupSize + localId] = binCount;
+    }
+	
+	return;
+}
+
+__kernel void histogram2b(__global uint* subHistograms, __global uint* histogram, uint numSubHistograms)
+{
+    int globalX = get_global_id(0);
+
+    for(int i = 0; i < numSubHistograms; i++)
+    {
+	    histogram[globalX] += subHistograms[i * HISTOGRAM_SIZE + globalX];
+	}
+}
+
+
 
 
 /*! First part of the histogram equalization, determines a new pixel value for each possible pixel value in the input image.
@@ -95,6 +138,8 @@ __kernel void equalize1(__global uint* histogram, __global uint* newValues)
 
 	return;
 }
+
+
 
 /*! Second part of the histogram equalization, creates an output image from the input image using the output from the first part.
  *
