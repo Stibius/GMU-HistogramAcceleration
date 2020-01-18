@@ -14,22 +14,22 @@ Dokumentace by měla obsahovat způsob a zdůvodnění paralelizace a přizpůso
 ### Popis cíle:
 
 Zpracujeme výpočet histogramu vstupního obrázku pomocí OpenCL.
-Potom každý člen týmu zpracuje jednu metodu využívající tento histogram, a
-to jak s pomocí OpenCL tak CPU implementaci. Výsledný program umožní vybrat
-vstupní obrázek a metodu, kterou provede oběma způsoby, a vypíše čas
-provedení každého z nich a zobrazí výstupní obrázek.
+Potom každý člen týmu zpracuje jednu metodu využívající tento histogram, a
+to jak s pomocí OpenCL tak CPU implementaci. Výsledný program umožní vybrat
+vstupní obrázek a metodu, kterou provede oběma způsoby, a vypíše čas
+provedení každého z nich a zobrazí výstupní obrázek.
 
 ### Způsob vyhodnocení:
 
-Dosažené urychlení OpenCL implementace oproti CPU implementaci a
+Dosažené urychlení OpenCL implementace oproti CPU implementaci a
 korektnost výstupu.
 
-### Názvy použitých metod a způsob jejich využití:
+### Názvy použitých metod a způsob jejich využití:
 
-- výpočet histogramu vstupního obrázku (z toho budou vycházet všechny tři následující metody)
+- výpočet histogramu vstupního obrázku (z toho budou vycházet všechny tři následující metody)
 - ekvalizace histogramu - Jan Vybíral
 - segmentace obrazu na základě prahování histogramu (Image Segmentation by Histogram Thresholding) - Filip Zapletal
-- prahování s pomocí metody Otsu - Lukáš Piják
+- prahování s pomocí metody Otsu - Lukáš Piják
 
 ### Nástroje:
 
