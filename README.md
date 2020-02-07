@@ -36,7 +36,7 @@ korektnost výstupu.
 - MS Visual Studio
 - C++
 - OpenCL
-- SDL (jako ve cvičeních)
+- SDL 
 
 ### Reference na články a jiné zdroje:
 
